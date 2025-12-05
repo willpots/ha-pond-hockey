@@ -1,0 +1,7 @@
+{
+  "name": "Pond Hockey Alerts",
+  "domain": "pond_hockey",
+  "country": "US",
+  "homeassistant": "2024.0.0",
+  "render_readme": true
+}
