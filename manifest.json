@@ -1,0 +1,9 @@
+{
+  "domain": "pond_hockey",
+  "name": "Pond Hockey Alerts",
+  "version": "0.1.0",
+  "documentation": "https://github.com/willpots/pond-hockey",
+  "codeowners": ["@willpots"],
+  "requirements": [],
+  "iot_class": "local_polling"
+}

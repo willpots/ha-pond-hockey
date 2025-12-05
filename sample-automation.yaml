@@ -1,0 +1,24 @@
+automation:
+  - alias: "Notify when pond hockey is ready"
+    triggers:
+      - trigger: event
+        event_type: pond_hockey_freeze_ok
+    actions:
+      - service: notify.mobile_app_pixel
+        
+          message: >
+            Pond hockey conditions look promising:
+            {{ trigger.event.data.longest_freeze_hours }}h <=
+            {{ trigger.event.data.threshold_f }}°F.
+
+  - alias: "Log when pond hockey not ready"
+    triggers:
+      - trigger: event
+        event_type: pond_hockey_freeze_not_ready
+    actions:
+      - service: logbook.log
+        
+          name: Pond Hockey
+          message: >
+            Not ready. Longest freeze:
+            {{ trigger.event.data.longest_freeze_hours }}h.
