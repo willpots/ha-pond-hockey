@@ -5,5 +5,6 @@
   "documentation": "https://github.com/willpots/pond-hockey",
   "codeowners": ["@willpots"],
   "requirements": [],
-  "iot_class": "local_polling"
+  "iot_class": "local_polling",
+  "config_flow": true
 }

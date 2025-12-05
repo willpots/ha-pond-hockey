@@ -1,24 +1,31 @@
-import asyncio
-import logging
 from datetime import timedelta
+import logging
 
 import aiohttp
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.helpers.event import async_track_time_interval
 
+from .const import DOMAIN
+
 _LOGGER = logging.getLogger(__name__)
-
-DOMAIN = "pond_hockey"
-
-LAT = 42.3876
-LON = -71.0995
-FREEZE_THRESHOLD_F = 25
-REQUIRED_HOURS = 72
-USER_AGENT = "pond-hockey-alert/0.1 (you@example.com)"
 CHECK_INTERVAL = timedelta(hours=6)
+USER_AGENT = "pond-hockey-alert/0.1 (you@example.com)"
 
-async def async_setup(hass: HomeAssistant, config: dict):
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up via YAML (unused when using config entries)."""
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Pond Hockey from a config entry."""
+    latitude: float = entry.data["latitude"]
+    longitude: float = entry.data["longitude"]
+    freeze_threshold_f: float = entry.data["freeze_threshold_f"]
+    required_hours: int = entry.data["required_hours"]
+
     session = aiohttp.ClientSession(
         headers={
             "User-Agent": USER_AGENT,
@@ -27,7 +34,7 @@ async def async_setup(hass: HomeAssistant, config: dict):
     )
 
     async def async_get_hourly_periods():
-        pts_url = f"https://api.weather.gov/points/{LAT},{LON}"
+        pts_url = f"https://api.weather.gov/points/{latitude},{longitude}"
         async with session.get(pts_url) as resp:
             resp.raise_for_status()
             data = await resp.json()
@@ -36,7 +43,7 @@ async def async_setup(hass: HomeAssistant, config: dict):
         async with session.get(hourly_url) as resp:
             resp.raise_for_status()
             data = await resp.json()
-        return data["properties"]["periods"]  # temps in °F for hourly forecast [web:20]
+        return data["properties"]["periods"]  # temps in °F for hourly forecast. [web:20]
 
     def longest_freeze_hours(periods, threshold_f):
         longest = 0
@@ -54,46 +61,24 @@ async def async_setup(hass: HomeAssistant, config: dict):
     async def async_check_pond_hockey(now=None):
         try:
             periods = await async_get_hourly_periods()
-            longest = longest_freeze_hours(periods, FREEZE_THRESHOLD_F)
+            longest = longest_freeze_hours(periods, freeze_threshold_f)
 
-            if longest >= REQUIRED_HOURS:
-                _LOGGER.info(
-                    "Pond hockey READY: %s consecutive hours <= %s°F",
-                    longest,
-                    FREEZE_THRESHOLD_F,
-                )
-                hass.bus.async_fire(
-                    "pond_hockey_freeze_ok",
-                    {
-                        "status": "ready",
-                        "longest_freeze_hours": longest,
-                        "threshold_f": FREEZE_THRESHOLD_F,
-                        "required_hours": REQUIRED_HOURS,
-                    },
-                )
+            event_data = {
+                "latitude": latitude,
+                "longitude": longitude,
+                "longest_freeze_hours": longest,
+                "threshold_f": freeze_threshold_f,
+                "required_hours": required_hours,
+            }
+
+            if longest >= required_hours:
+                hass.bus.async_fire("pond_hockey_freeze_ok", event_data)
             else:
-                _LOGGER.info(
-                    "Pond hockey NOT ready: longest=%s h <= %s°F (need %s h)",
-                    longest,
-                    FREEZE_THRESHOLD_F,
-                    REQUIRED_HOURS,
-                )
-                hass.bus.async_fire(
-                    "pond_hockey_freeze_not_ready",
-                    {
-                        "status": "not_ready",
-                        "longest_freeze_hours": longest,
-                        "threshold_f": FREEZE_THRESHOLD_F,
-                        "required_hours": REQUIRED_HOURS,
-                    },
-                )
+                hass.bus.async_fire("pond_hockey_freeze_not_ready", event_data)
 
         except Exception as err:
             _LOGGER.error("Error checking pond hockey conditions: %s", err)
-            hass.bus.async_fire(
-                "pond_hockey_error",
-                {"error": str(err)},
-            )
+            hass.bus.async_fire("pond_hockey_error", {"error": str(err)})
 
     remove_interval = async_track_time_interval(
         hass, async_check_pond_hockey, CHECK_INTERVAL
@@ -104,8 +89,6 @@ async def async_setup(hass: HomeAssistant, config: dict):
         await session.close()
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _close_session)
-
-    # Optionally run once at startup
     hass.async_create_task(async_check_pond_hockey())
 
     return True
